@@ -12,17 +12,17 @@ the panel's Relay box overrides the endpoint per machine.
 
 ```
   AE instance A (host)                                  AE instance B (client)
-  ┌─────────────────────────────────────────────┐        ┌──────────────────────────────────────┐
+  ┌─────────────────────────────────────────────┐        ┌────────────────────────────────────────┐
   │ AEGP plugin AEM.aex ──ws──┐                 │        │                 ┌──ws──► AEGP plugin   │
-  │ (watch/write transforms)  │      wss/ws     │        │     wss/ws       │  AEM.aex           │
+  │ (watch/write transforms)  │      wss/ws     │        │     wss/ws       │  AEM.aex            │
   │  ▲ state.json ▼ orders    │◄────────────────┼────────┼─────────────────►│  (apply remote ops) │
-  │  ▲                       │     relay       │        │    to host's     │                    │
-  │  │ file bridge           │  INSIDE AE       │        │    in-AE relay    │                    │
+  │  ▲                        │    relay        │        │    to host's     │                     │
+  │  │ file bridge            │ INSIDE AE       │        │    in-AE relay    │                    │
   │  CEP panel                │  (js/relay.js)  │        │    CEP panel      │                    │
-  │  (hosts relay on 0.0.0.0) │  :5558 ◄────────┼────────┼──────────          │                    │
-  │  └── 0.0.0.0:5558        ┘                 │        │  (file socket →    │                    │
-  └─────────────────────────────────────────────┘        │   ws://<host>:5558)│                    │
-                                                         └──────────────────┴─────────────────────┘
+  │  (hosts relay on 0.0.0.0) │  :5558 ◄────────┼────────┼──────────          │                   │
+  │  └── 0.0.0.0:5558         ┘                 │        │  (file socket →    │                   │
+  └─────────────────────────────────────────────┘        │   ws://<host>:5558)│                   │
+                                                         └────────────────────┴───────────────────┘
 ```
 
 Three pieces:
