@@ -1,90 +1,91 @@
-# AEM — After Effects Multiplayer
+# AE Multiplayer
 
-Host and join live real-time ("multiplayer") sessions in After Effects: multiple AE instances on
-different machines work on the **same `.aep`** together, and every layer's transform properties
-(**position, anchor, scale, rotation, opacity**) sync live. The host's **project and resources are
-shared into the room automatically** — clients download them and can open the very same project.
+Real-time multiplayer collaboration for After Effects 2026 — multiple editors working in the same project at the same time, with live sync across transforms, keyframes, comp settings, and effect parameters.
 
-No port-forwarding, no VPN, no hand-copied files: sessions run over the **global internet**. A
-session service at `moonlit.onl/aem` issues room ids (custom name like `MYLOBBY` or auto
-`AEM####`), and everyone connects to `wss://moonlit.onl/aem/relay/<SESSION>` — the room IS the URL
-path. (`relay.js` is bundled in the release so you can also host your own relay.)
+> ⚠️ **Status: Planning / early build.** This is an ambitious systems project built around AE's lack of native change-event hooks. See [Architecture](#architecture) and [Risks](#risks) before diving in.
 
-## How it works (TL;DR)
+---
 
-- **`AEM.aex`** — a native AEGP plugin that lives inside After Effects. It polls each layer's
-  transform streams on every idle tick, sends *small ops* ("set position of layer 3 to [960,540]")
-  to the room, and applies remote ops back onto the local project. Because every machine opened the
-  **same `.aep`**, comp/layer indices match 1:1, so a remote change replays exactly.
-- **CEP panel** — the lobby UI. Shows the room code, hosts/joins/leaves, and runs the file engine:
-  it pushes the host's project + resources into the room and downloads them on join.
-- **`relay.js`** — a zero-dependency Node room server with a **session service** (`GET /aem/session`
-  issues room ids) and **path-addressed rooms**. Routes ops and stores room files for download.
-  Hosted at `moonlit.onl/aem` by default.
+## What this is
 
-See **[HOWITWORKS.md](HOWITWORKS.md)** for the full architecture and wire protocol, and
-**[HOWTOUSE.md](HOWTOUSE.md)** for setup + usage.
+AE has no built-in way to collaborate live — no shared sessions, no event API to hook into for detecting edits. This project builds that layer from scratch:
 
-## Features
+- **Full live sync** — any user can edit any property (transforms, keyframes, comp settings, effect parameters) and it propagates to everyone else's AE instance.
+- **Layer claims (soft locking)** — when a user actively edits a layer, it's claimed: other users see who owns it and can't edit it until they're done (5s idle timeout releases it automatically). Claims cascade through parent/null rigs.
+- **Presence & identity** — persistent username + color per user, collision-safe (duplicate usernames get tagged, duplicate colors get silently reassigned).
+- **Collaboration UI** — layer list overlay with claim badges, color-coded ownership outlines, session status bar, and connection health, all inside a UXP panel.
 
-- Live sync of every layer's position, anchor, scale, rotation and opacity in the active comp.
-- Automatic project sharing — the host's `.aep` and every resource are pushed to the room.
-- Auto-import — new files imported by anyone are shared to the whole lobby automatically.
-- Auto-connect — the plugin remembers your last session and re-hosts/re-joins on load.
-- Works worldwide by default, with an optional self-hosted relay for LAN/private use.
+## Why it's hard
 
-## Requirements
+After Effects' scripting API is **eventless** — there's no `onPropertyChanged` callback. Every part of this system is built around **polling and diffing** project state rather than subscribing to changes. That single constraint shapes nearly every architectural decision here.
 
-- Windows + **After Effects** (plugin compiled for AE 2026; CEP panel works on AE 2024+).
-- Internet access (for the default global relay).
-- At least two machines to see the sync in action.
+## Architecture
 
-## Install (every machine)
+```
+┌─────────────┐   WebSocket    ┌──────────────────┐   WebSocket   ┌─────────────┐
+│ UXP Panel A │ ◄─────────────►│  Relay Server     │◄─────────────►│ UXP Panel B │
+│ (in AE)     │                │ (Node + Yjs/      │                │ (in AE)     │
+│             │                │  y-websocket)     │                │             │
+└─────────────┘                └──────────────────┘                └─────────────┘
+      │                                                                    │
+      ▼                                                                    ▼
+ Local AE project                                                   Local AE project
+ (applied via UXP/                                                  (applied via UXP/
+  ExtendScript bridge)                                              ExtendScript bridge)
+```
 
-1. Run `install.bat` **as Administrator** → copies `AEM.aex` to
-   `C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\Plug-ins`.
-2. Run `install_extension.bat` (double-click) → installs the panel for your user and enables
-   unsigned CSXS extensions.
-3. Restart After Effects.
+Each editor runs the project locally. UXP panels poll AE's project state, diff it against the last known snapshot, and push changes through a CRDT (Yjs) via a relay server that merges and rebroadcasts updates. The relay never touches AE directly — it's a dumb merge point.
 
-## Quick start
+## Core components
 
-1. Host opens their project, opens the panel (**Window > Extensions > AEM Multiplayer**) and clicks
-   **Host Session**. Optionally type a **room name** first (e.g. `MYLOBBY`); empty means the service
-   auto-generates a code like `AEM1234`. The panel shows the room code and starts sharing the project.
-2. Clients enter the host's **room name/code or full link** (e.g. `MYLOBBY`, `AEM1234`, or
-   `wss://moonlit.onl/aem/relay/MYLOBBY`) and click **Join Session**. The project downloads,
-   opens itself, and resources import automatically.
-3. Edit on any machine — transforms sync in real time to everyone.
-4. Import a new file on any machine — everyone in the room gets it.
-5. Click **Leave** when done.
+| Component | Purpose |
+|---|---|
+| **Relay server** | Node + Yjs/y-websocket. Holds the canonical CRDT doc per session, merges and rebroadcasts updates, tracks presence. |
+| **Poll & diff engine** | Walks `app.project` every 100–250ms, diffs against last snapshot, emits only changed property paths. |
+| **CRDT mapping layer** | Maps AE property paths to Yjs shared types for deterministic concurrent-edit merging. |
+| **Apply layer** | Writes incoming remote changes back into the local AE project via the UXP/ExtendScript bridge. |
+| **Presence/awareness** | Ephemeral state — who's connected, active comp, selection — via Yjs Awareness. |
+| **Layer claims** | Soft per-layer locking triggered by active edits (not selection), cascading through parent chains, released after 5s idle. |
+| **Collaboration UI** | Layer list overlay, color-coded claim outlines, session status bar, lock toasts, comp presence strip. |
+| **User identity system** | Username + color, persisted locally, collision-safe (`#XXXX` tag for duplicate names, silent reassignment for duplicate colors — red reserved as the fallback). |
 
-## Relay & sessions
+## Tech stack
 
-- **Default:** sessions/rooms live at `moonlit.onl/aem` — `GET /aem/session` gives an id (custom
-  name or auto `AEM####`, no reuse while live), and the room is the path `wss://moonlit.onl/aem/relay/<SESSION>`.
-- **Override per machine:** change the **Relay** box in the panel, or write a URL into
-  `%LOCALAPPDATA%\AEM\relay.txt` (delete the file or write `default` to return to the global relay).
-- **Self-host (optional):** run `node relay.js` (port 5558 by default; rooms under
-  `AEM_ROOMS_DIR/<SESSION>/`), point every machine's Relay box at `ws://<server-ip>:5558`, and open
-  inbound TCP 5558 on the server.
+- **Host:** After Effects 2026 (UXP, not CEP)
+- **Panel:** UXP + ExtendScript bridge for AE scripting calls
+- **Sync:** [Yjs](https://github.com/yjs/yjs) (CRDT) + [y-websocket](https://github.com/yjs/y-websocket)
+- **Server:** Node.js
 
-## Notes & limitations (MVP)
+## Build roadmap
 
-- Syncs the **active comp** in the foreground (one comp at a time).
-- **Last-write-wins** — whoever edits last is the source of truth; no conflict resolution yet.
-- Shared files are deduped by path — a resource changed only *on disk* won't re-share until it's
-  re-imported under a new path.
+1. Relay server skeleton (session/room handling)
+2. UXP panel skeleton (round-trip connectivity)
+3. Poll + diff engine — transform properties only
+4. Apply layer — remote diffs written back into AE
+5. Expand snapshot scope — keyframes, comp settings, markers
+6. Generic property-tree walker — full effect/expression coverage
+7. Presence/awareness layer
+8. Layer claims — trigger, cascade, idle release
+9. Conflict handling hardening
+10. Feedback-loop guards + performance pass
+11. Collaboration UI
+12. User identity system
 
-## Building from source
+## Open decisions
 
-- **Plugin (C++):** CMake project under `aegp/plugin` (AE SDK 25.6). `build.bat` compiles and
-  drops a versioned `.aex` into `output\`.
-- **Panel (HTML/JS):** `cep/AEM`, no build step.
-- **Relay:** `relay/relay.js`, zero npm dependencies.
-- Run `sync.bat` to copy the built plugin, panel, relay and docs into `output\` — the distributable
-  folder.
+- Conflict policy for two users editing the exact same property at once
+- Poll interval tradeoff (responsiveness vs. AE UI thread load)
+- Session/auth model for the relay server
+- Whether relay state needs persistence beyond the local `.aep` file
+- v1 effect coverage: AE-native only, or third-party plugins too
+
+## Risks
+
+- **UXP/ExtendScript bridge limitations** — not every AE scripting operation may be exposed identically across UXP vs. legacy ExtendScript; needs early verification.
+- **Poll performance** — full-tree polling at 100–250ms could be expensive on large comps; may need scoped/dirty-region polling.
+- **Merge correctness** — CRDTs handle structural conflicts well, but AE-specific semantics (interpolation types, expression side effects) may need custom merge logic beyond generic primitives.
+- **Local undo stack** — AE's undo is local-only; remote-originated changes landing mid-session can conflict with a user's Ctrl+Z expectations. Flagged as a known v1 limitation.
 
 ## License
 
-No license specified. See the repository owner before redistributing.
+TBD
