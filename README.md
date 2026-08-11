@@ -23,15 +23,15 @@ After Effects' scripting API is **eventless** — there's no `onPropertyChanged`
 
 ```
 ┌─────────────┐   WebSocket    ┌──────────────────┐   WebSocket   ┌─────────────┐
-│ UXP Panel A │ ◄─────────────►│  Relay Server     │◄─────────────►│ UXP Panel B │
-│ (in AE)     │                │ (Node + Yjs/      │                │ (in AE)     │
-│             │                │  y-websocket)     │                │             │
-└─────────────┘                └──────────────────┘                └─────────────┘
-      │                                                                    │
-      ▼                                                                    ▼
- Local AE project                                                   Local AE project
- (applied via UXP/                                                  (applied via UXP/
-  ExtendScript bridge)                                              ExtendScript bridge)
+│ UXP Panel A │ ◄─────────────►│  Relay Server    │◄─────────────►│ UXP Panel B │
+│ (in AE)     │                │ (Node + Yjs/     │               │ (in AE)     │
+│             │                │  y-websocket)    │               │             │
+└─────────────┘                └──────────────────┘               └─────────────┘
+      │                                                                  │
+      ▼                                                                  ▼
+ Local AE project                                                 Local AE project
+ (applied via UXP/ExtendScript bridge)                            (applied via UXP/xtendScript bridge)
+                                                                  
 ```
 
 Each editor runs the project locally. UXP panels poll AE's project state, diff it against the last known snapshot, and push changes through a CRDT (Yjs) via a relay server that merges and rebroadcasts updates. The relay never touches AE directly — it's a dumb merge point.
