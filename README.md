@@ -24,7 +24,7 @@ After Effects' scripting API is **eventless** — there's no `onPropertyChanged`
 ```
 ┌─────────────┐   WebSocket    ┌──────────────────┐   WebSocket   ┌─────────────┐
 │ UXP Panel A │ ◄─────────────►│  Relay Server    │◄─────────────►│ UXP Panel B │
-│ (in AE)     │                │ (Node + Yjs/     │               │ (in AE)     │
+│ (in AE)     │                │  (Node + Yjs/    │               │ (in AE)     │
 │             │                │  y-websocket)    │               │             │
 └─────────────┘                └──────────────────┘               └─────────────┘
       │                                                                 │
