@@ -94,4 +94,4 @@ This code is not licensed for use, copying, modification, or distribution withou
 
 ---
 
-A project by **melthedev** — part of the **Moonlit** community.
+A project by **melthedev** — part and founder of the **Moonlit** community.
