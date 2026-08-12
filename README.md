@@ -40,33 +40,6 @@ Earlier builds targeted UXP, but After Effects doesn't support UXP panel plugins
 
 The panel (`client/`) polls and diffs project state, then talks to AE through `bridge.js`'s `evalScript` wrapper into `host/AEM.jsx` — the ExtendScript backend that actually reads/writes the AE DOM (snapshotting, applying ops, file I/O, project open/save). The relay never touches AE directly; it routes sync messages and shuttles file chunks between peers.
 
-## Project structure
-
-```
-com.moonlit.aemultiplayer/
-├── CSXS/manifest.xml     CEP extension manifest — host app/version, panel geometry
-├── install.bat            enables CEP debug mode, copies the extension into %APPDATA%
-├── host/
-│   └── AEM.jsx             ExtendScript backend: snapshot/apply, layer ops, file I/O,
-│                           project open/save, comp management — runs inside AE
-└── client/
-    ├── index.html
-    ├── css/panel.css
-    └── js/
-        ├── bridge.js        evalScript <-> JSON wrapper (aemEval)
-        ├── identity.js       username/color persistence + collision handling
-        ├── relay.js          WebSocket client — rooms, sync ops, file channel
-        ├── ids.js             stable per-layer IDs (survive add/remove/reorder)
-        ├── diff.js             snapshot diffing — values, keyframes, comp settings
-        ├── feedback.js         suppresses re-diffing a change we just applied
-        ├── claims.js           per-layer soft locking, parent-chain cascade, idle release
-        ├── share.js             project/.aep + asset transfer over the relay
-        └── ui.js               layer badges, presence strip, transfer indicator, toasts
-
-HOW-TO-INSTALL.md
-install.bat
-```
-
 ## Installation
 
 See `HOW-TO-INSTALL.md` for full steps. Short version:
