@@ -36,24 +36,6 @@ After Effects' scripting API is **eventless** — there's no `onPropertyChanged`
 
 Each editor runs the project locally. The panel polls `app.project`'s active comp, diffs it against the last snapshot, and sends only what changed to the relay, which rebroadcasts it to everyone else in the room. The relay never touches AE directly — it's a message router plus identity/collision arbitration, not a project-state owner.
 
-## Project structure
-
-```
-AEM/
-├── manifest.json      UXP manifest — panel entrypoint, moonlit.onl network permissions
-├── index.html          panel shell: identity picker, session controls, layer list, log
-├── css/panel.css
-└── js/
-    ├── identity.js      username/color persistence + server-confirmed collision handling
-    ├── relay.js         WebSocket client — host/join, sync ops, message contract
-    ├── walk.js          generic property-tree walker (transform + effects, by matchName)
-    ├── diff.js           snapshot diffing — static values, keyframes, comp settings
-    ├── apply.js          writes remote ops back into AE, feedback-loop guard
-    ├── claims.js          per-layer soft locking, parent-chain cascade, idle release
-    ├── ui.js               layer badges/outlines, presence strip, toast, identity card
-    └── main.js             wires everything together, poll loop
-```
-
 ## Message contract (panel ↔ relay)
 
 ```
