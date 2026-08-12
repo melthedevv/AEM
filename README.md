@@ -22,11 +22,11 @@ After Effects' scripting API is **eventless** — there's no `onPropertyChanged`
 ## Architecture
 
 ```
-┌─────────────┐   WebSocket    ┌───────────────────┐   WebSocket    ┌─────────────┐
-│ UXP Panel A │ ◄─────────────►│  Relay Server     │◄─────────────►│ UXP Panel B │
-│ (in AE)     │                │ (Node + WebSocket,│               │ (in AE)     │
-│             │                │  moonlit.onl)     │               │             │
-└─────────────┘                └───────────────────┘                └─────────────┘
+┌─────────────┐   WebSocket    ┌────────────────────┐   WebSocket   ┌─────────────┐
+│ UXP Panel A │ ◄─────────────►│  Relay Server      │◄─────────────►│ UXP Panel B │
+│ (in AE)     │                │ (Node + WebSocket, │               │ (in AE)     │
+│             │                │  moonlit.onl)      │               │             │
+└─────────────┘                └────────────────────┘               └─────────────┘
       │                                                                    │
       ▼                                                                    ▼
  Local AE project                                                   Local AE project
@@ -80,6 +80,8 @@ The relay server implementing this contract (session creation, room routing, use
 ## Pricing
 
 AEM is a paid extension — **€15 / $16**, one-time. Purchase includes the panel client and access to the hosted relay (moonlit.onl) needed to actually create/join rooms; the client isn't useful standalone without a relay to talk to.
+
+> **Current status:** dev builds (including this one) are free to use for now — license key + HWID-lock enforcement hasn't been built yet. This is a pre-launch state, not the final paid product. Once licensing ships, dev builds will stop being distributed and a purchased key will be required to run AEM.
 
 ## License
 
