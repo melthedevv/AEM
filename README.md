@@ -1,67 +1,109 @@
 # AEM — After Effects Multiplayer
 
-Real-time multiplayer collaboration for After Effects 2026 — multiple editors working in the same project at the same time, with live sync across transforms, keyframes, comp settings, and effect parameters.
+Real-time multiplayer collaboration for After Effects — multiple editors working in the same project at the same time, with live sync across transforms, keyframes, comp settings, effect parameters, layer structure, and project assets.
 
-> ⚠️ **Status: early build.** The UXP panel client is implemented; the relay server (Node/WebSocket) is a separate project this panel talks to and still needs building. See [Architecture](#architecture) and [Known limitations](#known-limitations).
+> ⚠️ **Status: early build.** The panel + host script are implemented and talk to a hosted relay (moonlit.onl) for room routing and file transfer. This is a debug/unsigned build — see [Installation](#installation).
 
 ---
 
 ## What this is
 
-After Effects has no built-in way to collaborate live — no shared sessions, no event API to hook into for detecting edits. AEM builds that layer as a UXP panel:
+After Effects has no built-in way to collaborate live — no shared sessions, no event API to hook into for detecting edits. AEM builds that layer as a **CEP extension** (panel + ExtendScript host):
 
 - **Live property sync** — transforms, keyframes, comp settings (duration/frame rate/width/height), and effect parameters propagate to everyone else's AE instance, via a generic property-tree walker rather than per-effect hand coding.
+- **Structural sync** — layers can be added, removed, and reordered mid-session and stay in sync, via stable per-layer IDs that survive index shifts (not raw layer-index tracking).
+- **Project & asset sharing** — the host's `.aep` and every footage/audio/image file it references get pushed to joining peers in chunks (100 MB/file cap) and imported automatically; anyone who imports new footage mid-session shares it too, so the whole room converges on the same assets.
 - **Layer claims (soft locking)** — a layer is claimed the moment someone actively edits it (not on mere selection). Claims cascade through parent/null rigs to their children, and auto-release after 5 seconds of inactivity — which also covers a claimant disconnecting mid-edit.
 - **Identity system** — persistent username + color per user, server-confirmed collision handling: duplicate names get a `#XXXX` tag, duplicate colors get silently reassigned, red is reserved exclusively for that reassignment.
-- **Collaboration UI** — layer list with claim badges and color-coded ownership outlines, a presence strip showing who's connected and which comp they're in, and toast feedback when an edit gets blocked by someone else's claim.
+- **Collaboration UI** — layer list with claim badges and color-coded ownership outlines, a presence strip, transfer progress for shared files, and toast feedback when an edit gets blocked by someone else's claim.
 
 ## Why it's hard
 
-After Effects' scripting API is **eventless** — there's no `onPropertyChanged` callback. Every part of this system is built around **polling and diffing** project state (every 200ms by default) rather than subscribing to changes. That single constraint shapes nearly every architectural decision here.
+After Effects' scripting API is **eventless** — there's no `onPropertyChanged` callback. Every part of this system is built around **polling and diffing** project state rather than subscribing to changes. That single constraint shapes nearly every architectural decision here.
+
+## Why CEP, not UXP
+
+Earlier builds targeted UXP, but After Effects doesn't support UXP panel plugins yet (that's still an Adobe roadmap item) — so this build uses **CEP** (HTML panel + ExtendScript), the framework every commercial AE panel runs on today.
 
 ## Architecture
 
 ```
-┌─────────────┐   WebSocket    ┌────────────────────┐   WebSocket   ┌─────────────┐
-│ UXP Panel A │ ◄─────────────►│  Relay Server      │◄─────────────►│ UXP Panel B │
-│ (in AE)     │                │ (Node + WebSocket, │               │ (in AE)     │
-│             │                │  moonlit.onl)      │               │             │
-└─────────────┘                └────────────────────┘               └─────────────┘
-      │                                                                    │
-      ▼                                                                    ▼
- Local AE project                                                   Local AE project
- (applied via UXP/                                                  (applied via UXP/
-  ExtendScript bridge)                                              ExtendScript bridge)
+┌───────────────────────┐   WebSocket    ┌──────────────────┐   WebSocket   ┌────────────────────────┐
+│ CEP Panel A           │◄─────────────► │  Relay Server    │◄─────────────►│ CEP Panel B            │
+│ (client/ + evalScript)│                │ (moonlit.onl —   │               │ (client/ + evalScript) │
+│         │             │                │  rooms + file    │               │         │              │
+│         ▼             │                │  relay)          │               │         ▼              │
+│ host/AEM.jsx          │                └──────────────────┘               │ host/AEM.jsx           │
+│ (ExtendScript, in AE) │                                                   │ (ExtendScript, in AE)  │
+└───────────────────────┘                                                   └────────────────────────┘
 ```
 
-Each editor runs the project locally. The panel polls `app.project`'s active comp, diffs it against the last snapshot, and sends only what changed to the relay, which rebroadcasts it to everyone else in the room. The relay never touches AE directly — it's a message router plus identity/collision arbitration, not a project-state owner.
+The panel (`client/`) polls and diffs project state, then talks to AE through `bridge.js`'s `evalScript` wrapper into `host/AEM.jsx` — the ExtendScript backend that actually reads/writes the AE DOM (snapshotting, applying ops, file I/O, project open/save). The relay never touches AE directly; it routes sync messages and shuttles file chunks between peers.
+
+## Project structure
+
+```
+com.moonlit.aemultiplayer/
+├── CSXS/manifest.xml     CEP extension manifest — host app/version, panel geometry
+├── install.bat            enables CEP debug mode, copies the extension into %APPDATA%
+├── host/
+│   └── AEM.jsx             ExtendScript backend: snapshot/apply, layer ops, file I/O,
+│                           project open/save, comp management — runs inside AE
+└── client/
+    ├── index.html
+    ├── css/panel.css
+    └── js/
+        ├── bridge.js        evalScript <-> JSON wrapper (aemEval)
+        ├── identity.js       username/color persistence + collision handling
+        ├── relay.js          WebSocket client — rooms, sync ops, file channel
+        ├── ids.js             stable per-layer IDs (survive add/remove/reorder)
+        ├── diff.js             snapshot diffing — values, keyframes, comp settings
+        ├── feedback.js         suppresses re-diffing a change we just applied
+        ├── claims.js           per-layer soft locking, parent-chain cascade, idle release
+        ├── share.js             project/.aep + asset transfer over the relay
+        └── ui.js               layer badges, presence strip, transfer indicator, toasts
+
+HOW-TO-INSTALL.md
+install.bat
+```
+
+## Installation
+
+See `HOW-TO-INSTALL.md` for full steps. Short version:
+
+1. Extract the zip, keeping the folder named `com.moonlit.aemultiplayer`.
+2. Run `install.bat` — enables CEP debug mode in the registry and copies the extension into `%APPDATA%\Adobe\CEP\extensions`.
+3. Restart After Effects, then open **Window → Extensions → AEM**.
+
+This is currently a debug/unsigned build. Distribution as a signed `.zxp` (so end users don't need the registry debug flags) is planned for the paid release.
 
 ## Message contract (panel ↔ relay)
 
 ```
--> host   {t:'host', code, name, color}
--> join   {t:'join', code, name, color}
-<- ok     {t:'ok', code, you, tag, color, peers}     // server-confirmed identity
-<- peer   {t:'peer', from, e:{...}}                   // relayed from another client
--> sync   {t:'sync', e:{act:'set', path, static, keys, layer}}
--> sync   {t:'sync', e:{act:'claim', layer, chain, ts}}
--> sync   {t:'sync', e:{act:'release', chain}}
--> sync   {t:'sync', e:{act:'presence', name, color, comp}}
-<- err    {t:'err', e}
+-> host      {t:'host', code, name, color}
+-> join      {t:'join', code, name, color}
+<- ok        {t:'ok', code, you, tag, color, peers}          // server-confirmed identity
+<- peer      {t:'peer', from, e:{...}}                        // relayed sync event
+-> sync      {t:'sync', e:{act:'set', id, path, val, keys}}
+-> sync      {t:'sync', e:{act:'addLayer'|'removeLayer'|'moveLayer'|'renameLayer', ...}}
+-> sync      {t:'sync', e:{act:'claim', layer, chain, ts}} / {act:'release', chain}
+-> sync      {t:'sync', e:{act:'presence', name, color, comp}}
+-> file      fileBegin / fileGet  (project + asset transfer, chunked, 100 MB/file cap)
+<- file      {op:'added'|'data', name, path, size, data}
+<- err       {t:'err', e}
 ```
-
-The relay server implementing this contract (session creation, room routing, username/color collision arbitration) is not part of this repo yet — it's the next piece to build.
 
 ## Known limitations
 
-- **No CRDT.** Conflict resolution is currently last-write-wins at the property level, backstopped by the claim system rather than a true merge algorithm (e.g. Yjs). This covers the common case well since claims prevent most concurrent edits to the same layer, but doesn't guarantee a deterministic merge if a claim is somehow bypassed.
-- **No structural sync.** Adding/removing a layer or effect mid-session isn't synced yet — only changes to properties that already exist on both sides.
+- **No CRDT.** Conflict resolution is last-write-wins at the property level, backstopped by the claim system rather than a true merge algorithm (e.g. Yjs). Claims prevent most concurrent edits to the same layer, but this doesn't guarantee a deterministic merge if a claim is somehow bypassed.
+- **Layer identity matching** for unnamed null/solid layers can miss a reorder when two same-type, differently-unnamed layers swap position — noted directly in `ids.js`.
 - **AE's undo stack is local-only.** A remote change landing mid-session isn't reflected in your local undo history.
 - **Keyframe tracks are capped** at 64 keys per property for diffing safety; longer tracks are truncated in the synced snapshot.
+- **File transfers are capped** at 100 MB per file.
 
 ## Pricing
 
-AEM is a paid extension — **€15 / $16**, one-time. Purchase includes the panel client and access to the hosted relay (moonlit.onl) needed to actually create/join rooms; the client isn't useful standalone without a relay to talk to.
+AEM is a paid extension — **€15 / $16**, one-time. Purchase includes the panel client and access to the hosted relay (moonlit.onl) needed to create/join rooms and share project files — the client isn't useful standalone without a relay to talk to.
 
 > **Current status:** dev builds (including this one) are free to use for now — license key + HWID-lock enforcement hasn't been built yet. This is a pre-launch state, not the final paid product. Once licensing ships, dev builds will stop being distributed and a purchased key will be required to run AEM.
 
