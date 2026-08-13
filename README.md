@@ -2,7 +2,7 @@
 
 Real-time multiplayer collaboration for After Effects: multiple editors working in the same project at the same time, with live sync across transforms, keyframes, comp settings, effect parameters, layer structure, and project assets.
 
-> ⚠️ **Status: early build.** The panel + host script are implemented and talk to a hosted relay (moonlit.onl) for room routing and file transfer. This is a debug/unsigned build, see [Installation](#installation).
+> ⚠️ **Status: V19.9.5 (dev build).** The panel + host script are implemented and talk to a hosted relay (moonlit.onl) for room routing, sync relay, and file transfer. Sync is fully **mutual** — every peer in the room is equal, no host-only privileges. This is a debug/unsigned build, see [Installation](#installation).
 
 ---
 
@@ -12,9 +12,15 @@ After Effects has no built-in way to collaborate live: no shared sessions, no ev
 
 - **Live property sync**: transforms, keyframes, comp settings (duration/frame rate/width/height), and effect parameters propagate to everyone else's AE instance, via a generic property-tree walker rather than per-effect hand coding.
 - **Structural sync**: layers can be added, removed, and reordered mid-session and stay in sync, via stable per-layer IDs that survive index shifts (not raw layer-index tracking).
+- **Full mutual sync (no host privilege)**: clients add, remove, reorder, and edit layers, markers, comp settings, and effect parameters exactly like the host — the relay forwards every op symmetrically, and a client's own edits are never reverted by the host's periodic resync.
+- **Timeline markers**: markers sync live by timecode identity, added or removed mid-session.
+- **Chat + optional voice (WebRTC)**: room chat with per-user names and colors, plus an opt-in mesh voice channel whose signaling rides the existing relay channel (no server changes needed).
+- **Persistent layer identity**: each layer's collab id is written into the shared `.aep` as a comment tag (`[[aem:v1:<id>]]`), so identity survives reorder, rename, duplicate, split, and save/reopen with zero sync traffic.
 - **Project & asset sharing**: the host's `.aep` and every footage/audio/image file it references get pushed to joining peers in chunks (100 MB/file cap) and imported automatically; anyone who imports new footage mid-session shares it too, so the whole room converges on the same assets.
+- **Media pool & precomp browser**: shared footage/audio/image files — and the active comp's precomp tree, recursively — are listed and importable into your comp with one click.
 - **Layer claims (soft locking)**: a layer is claimed the moment someone actively edits it, not on mere selection. Claims cascade through parent/null rigs to their children, and auto-release after 5 seconds of inactivity, which also covers a claimant disconnecting mid-edit.
 - **Identity system**: persistent username + color per user, server-confirmed collision handling. Duplicate names get a `#XXXX` tag, duplicate colors get silently reassigned, red is reserved exclusively for that reassignment.
+- **Session health dashboard**: live ping latency, outbound/inbound ops per second, LWW conflict count, id-drift events, op-queue depth, and a feed of the most recent ops that actually fired.
 - **Collaboration UI**: layer list with claim badges and color-coded ownership outlines, a presence strip, transfer progress for shared files, and toast feedback when an edit gets blocked by someone else's claim.
 
 ## Why it's hard
@@ -38,7 +44,7 @@ Earlier builds targeted UXP, but After Effects doesn't support UXP panel plugins
 └───────────────────────┘                                                   └────────────────────────┘
 ```
 
-The panel (`client/`) polls and diffs project state, then talks to AE through `bridge.js`'s `evalScript` wrapper into `host/AEM.jsx`, the ExtendScript backend that actually reads/writes the AE DOM (snapshotting, applying ops, file I/O, project open/save). The relay never touches AE directly; it routes sync messages and shuttles file chunks between peers.
+The panel (`client/`) polls and diffs project state, then talks to AE through `bridge.js`'s `evalScript` wrapper into `host/AEM.jsx`, the ExtendScript backend that actually reads/writes the AE DOM (snapshotting, applying ops, file I/O, project open/save). The relay never touches AE directly; it routes sync messages and shuttles file chunks between peers. The relay is symmetric — it forwards every sync op to host and clients alike, so no peer is privileged — and it backpressures large sync/snapshot frames against slow sockets while capping incoming frame sizes, so a single misbehaving client can't stall or memory-flood a room.
 
 ## Installation
 
@@ -60,7 +66,10 @@ This is currently a debug/unsigned build. Distribution as a signed `.zxp` (so en
 -> sync      {t:'sync', e:{act:'set', id, path, val, keys}}
 -> sync      {t:'sync', e:{act:'addLayer'|'removeLayer'|'moveLayer'|'renameLayer', ...}}
 -> sync      {t:'sync', e:{act:'claim', layer, chain, ts}} / {act:'release', chain}
--> sync      {t:'sync', e:{act:'presence', name, color, comp}}
+-> sync      {t:'sync', e:{act:'presence'|'chat'|'voice'|'pin'|'view'|'markerAdd'|'markerRemove', ...}}
+-> sync      {t:'sync', e:{act:'ids', ...}}                   // id registry broadcast
+-> sync      {t:'sync', e:{act:'resync'|'resync-request'|'syncDone', snap, prev, ids}}
+<- peer-left {t:'peer', e:{act:'peer-left', name}}            // full peer removal
 -> file      fileBegin / fileGet  (project + asset transfer, chunked, 100 MB/file cap)
 <- file      {op:'added'|'data', name, path, size, data}
 <- err       {t:'err', e}
