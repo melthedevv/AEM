@@ -2,7 +2,7 @@
 
 Real-time multiplayer collaboration for After Effects: multiple editors working in the same project at the same time, with live sync across transforms, keyframes, comp settings, effect parameters, layer structure, and project assets.
 
-> ⚠️ **Status: V19.9.5 (dev build).** The panel + host script are implemented and talk to a hosted relay (moonlit.onl) for room routing, sync relay, and file transfer. Sync is fully **mutual** — every peer in the room is equal, no host-only privileges. This is a debug/unsigned build, see [Installation](#installation).
+> ⚠️ **Status: V19.9.6 (dev build).** The panel + host script are implemented and talk to a hosted relay (moonlit.onl) for room routing, sync relay, and file transfer. Sync is fully **mutual** — every peer in the room is equal, no host-only privileges. This is a debug/unsigned build, see [Installation](#installation).
 
 ---
 
