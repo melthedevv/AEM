@@ -16,9 +16,11 @@ After Effects has no built-in way to collaborate live: no shared sessions, no ev
 - **Timeline markers**: markers sync live by timecode identity, added or removed mid-session.
 - **Chat + optional voice (WebRTC)**: room chat with per-user names and colors, plus an opt-in mesh voice channel whose signaling rides the existing relay channel (no server changes needed).
 - **Persistent layer identity**: each layer's collab id is written into the shared `.aep` as a comment tag (`[[aem:v1:<id>]]`), so identity survives reorder, rename, duplicate, split, and save/reopen with zero sync traffic.
-- **Project & asset sharing**: the host's `.aep` and every footage/audio/image file it references get pushed to joining peers in chunks (100 MB/file cap) and imported automatically; anyone who imports new footage mid-session shares it too, so the whole room converges on the same assets.
-- **Media pool & precomp browser**: shared footage/audio/image files — and the active comp's precomp tree, recursively — are listed and importable into your comp with one click.
-- **Layer claims (soft locking)**: a layer is claimed the moment someone actively edits it, not on mere selection. Claims cascade through parent/null rigs to their children, and auto-release after 5 seconds of inactivity, which also covers a claimant disconnecting mid-edit.
+- **Project & asset sharing**: the host's `.aep` and every footage/audio/image file it references get pushed to joining peers in chunks (100 MB/file cap) and imported automatically; anyone who imports new footage mid-session shares it too, and every peer auto-pulls + imports it, so the whole room converges on the same assets with zero manual fetching.
+- **Media pool & precomp browser**: shared footage/audio/image files — and the active comp's precomp tree, recursively — are listed and importable into your comp with one click. Everything shared is already fetched and imported automatically (badge shows `fetching…` until on disk), so clicking just adds it to your comp. The pool card **doesn't exist until you're in a session**: it's hidden when you're not in a room, and every session gets its own temp subfolder (`aem_shared/<room code>`) that's deleted when the session ends — each project gets a clean, separate pool.
+- **Live presence (ghosts + playheads)**: selection ghosts and playheads render per display frame, interpolated between the 250 ms view packets (with dead-reckoning past a dropped packet) — peer playheads glide instead of teleporting.
+- **Layer claims (soft locking)**: a layer is claimed the moment someone actively edits it, not on mere selection. The lock is instant locally (badge/color same frame), native AE locking only applies to other peers, and if a remote claim beats yours the conflict rolls back with a toast and a short back-off so you don't re-fight on every tick. Claims cascade through parent/null rigs to their children and auto-release after 5 seconds of inactivity, which also covers a claimant disconnecting mid-edit.
+- **Checkpoints (any peer)**: anyone can save a checkpoint — save your project, freeze a copy into the shared folder, and push it to the room; everyone can jump to it. No host privilege.
 - **Identity system**: persistent username + color per user, server-confirmed collision handling. Duplicate names get a `#XXXX` tag, duplicate colors get silently reassigned, red is reserved exclusively for that reassignment.
 - **Session health dashboard**: live ping latency, outbound/inbound ops per second, LWW conflict count, id-drift events, op-queue depth, and a feed of the most recent ops that actually fired.
 - **Collaboration UI**: layer list with claim badges and color-coded ownership outlines, a presence strip, transfer progress for shared files, and toast feedback when an edit gets blocked by someone else's claim.
@@ -82,6 +84,10 @@ This is currently a debug/unsigned build. Distribution as a signed `.zxp` (so en
 - **AE's undo stack is local-only.** A remote change landing mid-session isn't reflected in your local undo history.
 - **Keyframe tracks are capped** at 64 keys per property for diffing safety; longer tracks are truncated in the synced snapshot.
 - **File transfers are capped** at 100 MB per file.
+- **Voice chat needs a capture-capable CEP build.** AE's embedded panel browser
+  can't show a mic permission prompt, so `getUserMedia` is frequently denied on
+  many setups — the panel reports the exact reason and stays retryable, but on
+  machines where the CEP build blocks media capture, voice simply won't start.
 
 ## Pricing
 
