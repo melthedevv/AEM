@@ -91,7 +91,7 @@ This is currently a debug/unsigned build. Distribution as a signed `.zxp` (so en
 
 ## Pricing
 
-AEM is a paid extension: **€30.00 / $46.42**, one-time. Purchase includes the panel client and access to the hosted relay (moonlit.onl) needed to create/join rooms and share project files. The client isn't useful standalone without a relay to talk to.
+AEM is a paid extension: **€40.00 / $46.42**, one-time. Purchase includes the panel client and access to the hosted relay (moonlit.onl) needed to create/join rooms and share project files. The client isn't useful standalone without a relay to talk to.
 
 > **Current status:** dev builds (including this one) are free to use for now. License key + HWID-lock enforcement hasn't been built yet. This is a pre-launch state, not the final paid product. Once licensing ships, dev builds will stop being distributed and a purchased key will be required to run AEM.
 
